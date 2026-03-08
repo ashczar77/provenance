@@ -25,7 +25,7 @@ By linking a physical item's unique serial number to an ERC-721 token on the blo
 
 ### **1. Clone and Install**
 ```bash
-git clone https://github.com/YOUR_USERNAME/provenance.git
+git clone https://github.com/ashczar77/provenance.git
 cd provenance
 ```
 

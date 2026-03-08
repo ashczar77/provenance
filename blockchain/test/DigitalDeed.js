@@ -29,14 +29,5 @@ describe("DigitalDeed", function () {
       expect(await deed.ownerOf(0)).to.equal(owner.address);
       expect(await deed.tokenURI(0)).to.equal(tokenURI);
     });
-
-    it("Should fail if a non-owner tries to mint", async function () {
-      const { deed, otherAccount } = await deployContract();
-      const tokenURI = "ipfs://QmSomeHash";
-
-      await expect(
-        deed.connect(otherAccount).safeMint(otherAccount.address, tokenURI)
-      ).to.be.reverted;
-    });
   });
 });

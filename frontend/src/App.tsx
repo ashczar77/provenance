@@ -3,8 +3,29 @@ import { useAccount, useReadContract, useWriteContract } from 'wagmi';
 import { useState } from 'react';
 import './App.css';
 
-// Placeholder ABI for now (we'll replace it later with the actual JSON)
+// Use the real ABI from the compiled contract artifact
 const CONTRACT_ABI = [
+  {
+    "inputs": [],
+    "name": "totalSupply",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "uint256", "name": "index", "type": "uint256" }],
+    "name": "tokenByIndex",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }],
+    "name": "tokenURI",
+    "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
   {
     "inputs": [
       { "internalType": "address", "name": "to", "type": "address" },
@@ -17,33 +38,68 @@ const CONTRACT_ABI = [
   }
 ] as const;
 
-const CONTRACT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3'; // Default Hardhat address
+const CONTRACT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+
+function DeedCard({ tokenId }: { tokenId: bigint }) {
+  const { data: uri } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: CONTRACT_ABI,
+    functionName: 'tokenURI',
+    args: [tokenId],
+  });
+
+  return (
+    <div className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 hover:border-blue-500 transition-all">
+      <div className="h-40 bg-gray-700 flex items-center justify-center">
+        {uri ? (
+          <span className="text-gray-400 text-xs break-all p-2 text-center">{uri}</span>
+        ) : (
+          <span className="text-gray-500 italic">Loading...</span>
+        )}
+      </div>
+      <div className="p-4">
+        <h3 className="font-bold text-blue-400">Deed #{tokenId.toString()}</h3>
+        <p className="text-xs text-gray-500 mt-1 truncate">{uri || 'Fetching metadata...'}</p>
+      </div>
+    </div>
+  );
+}
 
 function App() {
   const { isConnected, address } = useAccount();
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
   const [imageUri, setImageUri] = useState('');
+  const [name, setName] = useState('');
+
+  const { data: totalSupply } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: CONTRACT_ABI,
+    functionName: 'totalSupply',
+  });
 
   const { writeContract, isPending } = useWriteContract();
 
   const handleMint = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!address) return;
+    if (!address || !imageUri) return;
 
     writeContract({
       address: CONTRACT_ADDRESS,
       abi: CONTRACT_ABI,
       functionName: 'safeMint',
-      args: [address, imageUri], // We'll simplify for now
+      args: [address, imageUri],
     });
   };
+
+  // Create an array of token indices to map over
+  const tokenIndices = totalSupply 
+    ? Array.from({ length: Number(totalSupply) }, (_, i) => i).reverse() 
+    : [];
 
   return (
     <div className="min-h-screen bg-gray-900 text-white font-sans p-8">
       <header className="flex justify-between items-center mb-12">
         <h1 className="text-3xl font-bold tracking-tighter text-blue-400">
-          Digital Deed <span className="text-white font-light text-xl">Marketplace</span>
+          Provenance <span className="text-white font-light text-xl">Marketplace</span>
         </h1>
         <ConnectButton />
       </header>
@@ -55,7 +111,7 @@ function App() {
             <h2 className="text-2xl font-semibold mb-6">Mint a New Deed</h2>
             <form onSubmit={handleMint} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Item Name</label>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Item Name (Internal)</label>
                 <input
                   type="text"
                   value={name}
@@ -65,16 +121,7 @@ function App() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Description</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Describe the condition, serial number, etc."
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Image URI (IPFS)</label>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Metadata URI (IPFS)</label>
                 <input
                   type="text"
                   value={imageUri}
@@ -95,18 +142,22 @@ function App() {
 
           {/* Gallery View */}
           <div>
-            <h2 className="text-2xl font-semibold mb-6">Recent Deeds</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* This would be mapped from the blockchain later */}
-              <div className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 hover:border-blue-500 transition-all cursor-pointer">
-                <div className="h-40 bg-gray-700 flex items-center justify-center">
-                  <span className="text-gray-500 italic">No Image</span>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-semibold">Recent Deeds</h2>
+              <span className="bg-blue-900/30 text-blue-400 px-3 py-1 rounded-full text-sm font-mono border border-blue-800">
+                Total: {totalSupply?.toString() || '0'}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+              {tokenIndices.length > 0 ? (
+                tokenIndices.map((index) => (
+                  <DeedCard key={index} tokenId={BigInt(index)} />
+                ))
+              ) : (
+                <div className="col-span-2 text-center py-12 bg-gray-800/50 rounded-xl border border-dashed border-gray-700">
+                  <p className="text-gray-500">No deeds found. Mint the first one!</p>
                 </div>
-                <div className="p-4">
-                  <h3 className="font-bold">Placeholder Item</h3>
-                  <p className="text-sm text-gray-400 truncate">Connect to see real deeds</p>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
