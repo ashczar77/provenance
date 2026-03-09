@@ -13,6 +13,8 @@ contract DigitalDeed is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
     mapping(bytes32 => bool) private _usedSerialNumbers;
     // Mapping from tokenId to its physical serial number
     mapping(uint256 => string) private _deedSerialNumbers;
+    // Mapping from tokenId to its name
+    mapping(uint256 => string) private _deedNames;
 
     error SerialNumberAlreadyUsed(string serialNumber);
 
@@ -22,9 +24,10 @@ contract DigitalDeed is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
      * @dev Mint a new digital deed.
      * @param to The address of the recipient who will own the deed.
      * @param uri The IPFS metadata link (image, description, etc).
+     * @param name The name of the physical asset.
      * @param serialNumber The unique physical serial number of the asset.
      */
-    function safeMint(address to, string memory uri, string memory serialNumber) public {
+    function safeMint(address to, string memory uri, string memory name, string memory serialNumber) public {
         bytes32 serialHash = keccak256(abi.encodePacked(serialNumber));
         if (_usedSerialNumbers[serialHash]) {
             revert SerialNumberAlreadyUsed(serialNumber);
@@ -33,9 +36,18 @@ contract DigitalDeed is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
         uint256 tokenId = _nextTokenId++;
         _usedSerialNumbers[serialHash] = true;
         _deedSerialNumbers[tokenId] = serialNumber;
+        _deedNames[tokenId] = name;
 
         _safeMint(to, tokenId);
         _setTokenURI(tokenId, uri);
+    }
+
+    /**
+     * @dev Get the name associated with a deed.
+     */
+    function getName(uint256 tokenId) public view returns (string memory) {
+        _requireOwned(tokenId);
+        return _deedNames[tokenId];
     }
 
     /**

@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import './App.css';
 
-// ... (CONTRACT_ABI and CONTRACT_ADDRESS unchanged) ...
 const CONTRACT_ABI = [
   {
     "inputs": [],
@@ -46,6 +45,20 @@ const CONTRACT_ABI = [
   },
   {
     "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }],
+    "name": "ownerOf",
+    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }],
+    "name": "getName",
+    "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }],
     "name": "getSerialNumber",
     "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
     "stateMutability": "view",
@@ -53,8 +66,20 @@ const CONTRACT_ABI = [
   },
   {
     "inputs": [
+      { "internalType": "address", "name": "from", "type": "address" },
+      { "internalType": "address", "name": "to", "type": "address" },
+      { "internalType": "uint256", "name": "tokenId", "type": "uint256" }
+    ],
+    "name": "safeTransferFrom",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
       { "internalType": "address", "name": "to", "type": "address" },
       { "internalType": "string", "name": "uri", "type": "string" },
+      { "internalType": "string", "name": "name", "type": "string" },
       { "internalType": "string", "name": "serialNumber", "type": "string" }
     ],
     "name": "safeMint",
@@ -64,13 +89,24 @@ const CONTRACT_ABI = [
   }
 ] as const;
 
-const CONTRACT_ADDRESS = '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512';
+const CONTRACT_ADDRESS = '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0';
 
-function DeedCard({ tokenId }: { tokenId: bigint }) {
+function DeedCard({ tokenId, onUpdate }: { tokenId: bigint, onUpdate?: () => void }) {
+  const { address } = useAccount();
+  const [recipient, setRecipient] = useState('');
+  const [isTransferring, setIsTransferring] = useState(false);
+
   const { data: uri, isLoading: isUriLoading } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
     functionName: 'tokenURI',
+    args: [tokenId],
+  });
+
+  const { data: name, isLoading: isNameLoading } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: CONTRACT_ABI,
+    functionName: 'getName',
     args: [tokenId],
   });
 
@@ -81,7 +117,47 @@ function DeedCard({ tokenId }: { tokenId: bigint }) {
     args: [tokenId],
   });
 
-  const isLoading = isUriLoading || isSerialLoading;
+  const { data: owner } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: CONTRACT_ABI,
+    functionName: 'ownerOf',
+    args: [tokenId],
+  });
+
+  const { writeContract, data: hash, isPending, error, isError } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+
+  const isOwner = address && owner && address.toLowerCase() === (owner as string).toLowerCase();
+
+  useEffect(() => {
+    if (isError) {
+      toast.error('Transfer failed');
+      setIsTransferring(false);
+    }
+  }, [isError]);
+
+  useEffect(() => {
+    if (isSuccess) {
+      toast.success('Deed transferred!');
+      setIsTransferring(false);
+      setRecipient('');
+      if (onUpdate) onUpdate();
+    }
+  }, [isSuccess, onUpdate]);
+
+  const handleTransfer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!address || !recipient) return;
+
+    writeContract({
+      address: CONTRACT_ADDRESS,
+      abi: CONTRACT_ABI,
+      functionName: 'safeTransferFrom',
+      args: [address, recipient as `0x${string}`, tokenId],
+    });
+  };
+
+  const isLoading = isUriLoading || isSerialLoading || isNameLoading;
 
   return (
     <div className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 hover:border-blue-500 transition-all hover:shadow-2xl hover:shadow-blue-500/10 group">
@@ -103,19 +179,71 @@ function DeedCard({ tokenId }: { tokenId: bigint }) {
         </div>
       </div>
       <div className="p-4 bg-gradient-to-b from-gray-800 to-gray-800/50">
-        <h3 className="font-bold text-blue-400 text-sm tracking-tight uppercase">Digital Deed</h3>
-        <div className="mt-3 space-y-2">
-          <p className="text-[10px] uppercase text-gray-500 font-bold tracking-widest">Physical Serial</p>
-          <p className="text-sm font-mono text-white bg-gray-950/50 px-3 py-2 rounded-lg border border-gray-700/50 shadow-inner group-hover:border-blue-500/30 transition-colors">
-            {serial || '...'}
-          </p>
+        <h3 className="font-bold text-blue-400 text-sm tracking-tight uppercase truncate">
+          {name || 'Digital Deed'}
+        </h3>
+        
+        <div className="mt-3 space-y-3">
+          <div className="space-y-1">
+            <p className="text-[9px] uppercase text-gray-500 font-bold tracking-widest font-sans">Physical Serial</p>
+            <p className="text-xs font-mono text-white bg-gray-950/50 px-2 py-1.5 rounded border border-gray-700/50 shadow-inner group-hover:border-blue-500/30 transition-colors">
+              {serial || '...'}
+            </p>
+          </div>
+          
+          <div className="space-y-1">
+            <p className="text-[9px] uppercase text-gray-500 font-bold tracking-widest font-sans">Current Owner</p>
+            <p className="text-[10px] font-mono text-gray-300 truncate bg-gray-900/40 px-2 py-1 rounded">
+              {owner ? (isOwner ? 'You' : owner as string) : '...'}
+            </p>
+          </div>
         </div>
+
+        {isOwner && (
+          <div className="mt-4 pt-4 border-t border-gray-700/50">
+            {isTransferring ? (
+              <form onSubmit={handleTransfer} className="space-y-2">
+                <input 
+                  type="text" 
+                  value={recipient}
+                  onChange={(e) => setRecipient(e.target.value)}
+                  placeholder="Recipient Address (0x...)"
+                  className="w-full bg-gray-950 text-[10px] p-2 rounded border border-gray-700 focus:ring-1 focus:ring-blue-500 outline-none font-mono"
+                  disabled={isPending || isConfirming}
+                />
+                <div className="flex gap-2">
+                  <button 
+                    type="submit"
+                    disabled={isPending || isConfirming}
+                    className="flex-1 bg-blue-600 text-[10px] font-bold py-1.5 rounded disabled:opacity-50"
+                  >
+                    {isPending ? 'Signing...' : isConfirming ? 'Confirming...' : 'Send'}
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setIsTransferring(false)}
+                    className="px-3 bg-gray-700 text-[10px] font-bold py-1.5 rounded"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <button 
+                onClick={() => setIsTransferring(true)}
+                className="w-full bg-gray-700 hover:bg-blue-600/20 hover:text-blue-400 text-[10px] font-bold py-2 rounded transition-all flex items-center justify-center gap-2"
+              >
+                Transfer Deed
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function DeedIdFetcherWrapper({ index, owner }: { index: number, owner: `0x${string}` }) {
+function DeedIdFetcherWrapper({ index, owner, onUpdate }: { index: number, owner: `0x${string}`, onUpdate: () => void }) {
   const { data: tokenId } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
@@ -124,7 +252,7 @@ function DeedIdFetcherWrapper({ index, owner }: { index: number, owner: `0x${str
   });
 
   if (tokenId === undefined) return null;
-  return <DeedCard tokenId={tokenId as bigint} />;
+  return <DeedCard tokenId={tokenId as bigint} onUpdate={onUpdate} />;
 }
 
 function App() {
@@ -153,7 +281,11 @@ function App() {
     hash,
   });
 
-  // Handle errors immediately
+  const handleGlobalUpdate = () => {
+    refetchTotal();
+    refetchBalance();
+  };
+
   useEffect(() => {
     if (isError && error) {
       const errorMessage = error.message.includes('SerialNumberAlreadyUsed') 
@@ -163,19 +295,16 @@ function App() {
     }
   }, [isError, error]);
 
-  // Handle confirmation
   useEffect(() => {
     if (isConfirmed) {
       toast.success('Deed successfully minted!');
       setImageUri('');
       setSerialNumber('');
       setName('');
-      refetchTotal();
-      refetchBalance();
+      handleGlobalUpdate();
     }
-  }, [isConfirmed, refetchTotal, refetchBalance]);
+  }, [isConfirmed]);
 
-  // Handle waiting for signature and transaction
   useEffect(() => {
     if (isPending) {
       toast.loading('Confirm in wallet...', { id: 'mint' });
@@ -188,7 +317,7 @@ function App() {
 
   const handleMint = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!address || !imageUri || !serialNumber) {
+    if (!address || !imageUri || !serialNumber || !name) {
       toast.error('Please fill in all fields');
       return;
     }
@@ -197,7 +326,7 @@ function App() {
       address: CONTRACT_ADDRESS,
       abi: CONTRACT_ABI,
       functionName: 'safeMint',
-      args: [address, imageUri, serialNumber],
+      args: [address, imageUri, name, serialNumber],
     });
   };
 
@@ -232,7 +361,6 @@ function App() {
 
         {isConnected ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-            {/* Minting Form */}
             <div className="lg:col-span-5">
               <div className="bg-gray-900 p-8 rounded-3xl shadow-2xl border border-gray-800/50 h-fit sticky top-8">
                 <div className="mb-8">
@@ -282,7 +410,6 @@ function App() {
               </div>
             </div>
 
-            {/* Gallery View */}
             <div className="lg:col-span-7 space-y-8">
               <div className="flex bg-gray-900 p-1.5 rounded-2xl border border-gray-800/50 shadow-lg">
                 <button 
@@ -303,7 +430,7 @@ function App() {
                 {view === 'all' ? (
                   marketIndices.length > 0 ? (
                     marketIndices.map((tokenId) => (
-                      <DeedCard key={tokenId.toString()} tokenId={tokenId} />
+                      <DeedCard key={tokenId.toString()} tokenId={tokenId} onUpdate={handleGlobalUpdate} />
                     ))
                   ) : (
                     <div className="col-span-2 text-center py-32 bg-gray-900/30 rounded-3xl border-2 border-dashed border-gray-800">
@@ -313,7 +440,7 @@ function App() {
                 ) : (
                   address && Number(myBalance) > 0 ? (
                     Array.from({ length: Number(myBalance) }).map((_, i) => (
-                      <DeedIdFetcherWrapper key={i} index={i} owner={address} />
+                      <DeedIdFetcherWrapper key={i} index={i} owner={address} onUpdate={handleGlobalUpdate} />
                     ))
                   ) : (
                     <div className="col-span-2 text-center py-32 bg-gray-900/30 rounded-3xl border-2 border-dashed border-gray-800">
@@ -344,24 +471,6 @@ function App() {
       <footer className="mt-32 pb-16 border-t border-gray-900/50 text-center space-y-4 pt-12">
         <p className="text-[10px] font-black tracking-[0.4em] text-gray-600 uppercase">Provenance Protocol v1.0</p>
         <p className="text-gray-700 text-xs font-medium">Securely linking physical heritage to digital permanence.</p>
-      </footer>
-    </div>
-  );
-}
-
-export default App;        <div className="text-center py-20">
-          <h2 className="text-5xl font-extrabold mb-4">The Future of Physical Ownership</h2>
-          <p className="text-xl text-gray-400 mb-8 max-w-2xl mx-auto">
-            Tokenize your physical assets and trade them as secure digital deeds on the blockchain.
-          </p>
-          <div className="flex justify-center">
-            <ConnectButton />
-          </div>
-        </div>
-      )}
-
-      <footer className="mt-20 pt-8 border-t border-gray-800 text-center text-gray-500 text-sm">
-        Build with React + Solidity + Tailwind v4
       </footer>
     </div>
   );

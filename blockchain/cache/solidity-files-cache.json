@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/Users/ashczar/Documents/blockchain/blockchain/contracts/DigitalDeed.sol": {
-      "lastModificationDate": 1772984646728,
-      "contentHash": "0d233d85fef118b5cec8f297656b1b62",
+      "lastModificationDate": 1773083611264,
+      "contentHash": "cda78b0066a260b98e3569e456bfa491",
       "sourceName": "contracts/DigitalDeed.sol",
       "solcConfig": {
         "version": "0.8.24",
