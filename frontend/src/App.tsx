@@ -65,6 +65,13 @@ const CONTRACT_ABI = [
     "type": "function"
   },
   {
+    "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }],
+    "name": "getOwnershipHistory",
+    "outputs": [{ "internalType": "address[]", "name": "", "type": "address[]" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       { "internalType": "address", "name": "from", "type": "address" },
       { "internalType": "address", "name": "to", "type": "address" },
@@ -89,12 +96,13 @@ const CONTRACT_ABI = [
   }
 ] as const;
 
-const CONTRACT_ADDRESS = '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0';
+const CONTRACT_ADDRESS = '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512';
 
 function DeedCard({ tokenId, onUpdate }: { tokenId: bigint, onUpdate?: () => void }) {
   const { address } = useAccount();
   const [recipient, setRecipient] = useState('');
   const [isTransferring, setIsTransferring] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const { data: uri, isLoading: isUriLoading } = useReadContract({
     address: CONTRACT_ADDRESS,
@@ -124,7 +132,14 @@ function DeedCard({ tokenId, onUpdate }: { tokenId: bigint, onUpdate?: () => voi
     args: [tokenId],
   });
 
-  const { writeContract, data: hash, isPending, error, isError } = useWriteContract();
+  const { data: history } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: CONTRACT_ABI,
+    functionName: 'getOwnershipHistory',
+    args: [tokenId],
+  });
+
+  const { writeContract, data: hash, isPending, isError } = useWriteContract();
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
   const isOwner = address && owner && address.toLowerCase() === (owner as string).toLowerCase();
@@ -160,8 +175,8 @@ function DeedCard({ tokenId, onUpdate }: { tokenId: bigint, onUpdate?: () => voi
   const isLoading = isUriLoading || isSerialLoading || isNameLoading;
 
   return (
-    <div className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 hover:border-blue-500 transition-all hover:shadow-2xl hover:shadow-blue-500/10 group">
-      <div className="h-40 bg-gray-700/50 flex items-center justify-center relative overflow-hidden">
+    <div className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 hover:border-blue-500 transition-all hover:shadow-2xl hover:shadow-blue-500/10 group flex flex-col">
+      <div className="h-40 bg-gray-700/50 flex items-center justify-center relative overflow-hidden shrink-0">
         {isLoading ? (
           <div className="animate-pulse flex flex-col items-center">
              <div className="h-4 w-48 bg-gray-600 rounded mb-2"></div>
@@ -178,29 +193,54 @@ function DeedCard({ tokenId, onUpdate }: { tokenId: bigint, onUpdate?: () => voi
           #{tokenId.toString()}
         </div>
       </div>
-      <div className="p-4 bg-gradient-to-b from-gray-800 to-gray-800/50">
+      <div className="p-4 bg-gradient-to-b from-gray-800 to-gray-800/50 flex-1 flex flex-col">
         <h3 className="font-bold text-blue-400 text-sm tracking-tight uppercase truncate">
           {name || 'Digital Deed'}
         </h3>
         
         <div className="mt-3 space-y-3">
           <div className="space-y-1">
-            <p className="text-[9px] uppercase text-gray-500 font-bold tracking-widest font-sans">Physical Serial</p>
+            <p className="text-[9px] uppercase text-gray-500 font-bold tracking-widest">Physical Serial</p>
             <p className="text-xs font-mono text-white bg-gray-950/50 px-2 py-1.5 rounded border border-gray-700/50 shadow-inner group-hover:border-blue-500/30 transition-colors">
               {serial || '...'}
             </p>
           </div>
           
           <div className="space-y-1">
-            <p className="text-[9px] uppercase text-gray-500 font-bold tracking-widest font-sans">Current Owner</p>
+            <p className="text-[9px] uppercase text-gray-500 font-bold tracking-widest">Current Owner</p>
             <p className="text-[10px] font-mono text-gray-300 truncate bg-gray-900/40 px-2 py-1 rounded">
               {owner ? (isOwner ? 'You' : owner as string) : '...'}
             </p>
           </div>
         </div>
 
+        <div className="mt-4 flex flex-col gap-2">
+          <button 
+            onClick={() => setShowHistory(!showHistory)}
+            className="text-[10px] uppercase font-bold text-blue-500/70 hover:text-blue-400 transition-colors flex items-center gap-1"
+          >
+            {showHistory ? 'Hide History' : 'View Provenance History'}
+          </button>
+
+          {showHistory && (
+            <div className="bg-gray-950/50 rounded-lg p-3 border border-gray-700/30 space-y-2 max-h-32 overflow-y-auto custom-scrollbar">
+              {history && (history as string[]).map((addr, i) => (
+                <div key={i} className="flex items-center gap-2 text-[9px] font-mono">
+                  <span className="text-gray-600">[{i}]</span>
+                  <span className={i === (history as string[]).length - 1 ? "text-blue-400 font-bold" : "text-gray-400"}>
+                    {addr === address ? 'You' : `${addr.slice(0, 6)}...${addr.slice(-4)}`}
+                  </span>
+                  {i === (history as string[]).length - 1 && (
+                    <span className="text-[8px] bg-blue-500/20 text-blue-400 px-1 rounded">CURRENT</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {isOwner && (
-          <div className="mt-4 pt-4 border-t border-gray-700/50">
+          <div className="mt-auto pt-4 border-t border-gray-700/50">
             {isTransferring ? (
               <form onSubmit={handleTransfer} className="space-y-2">
                 <input 

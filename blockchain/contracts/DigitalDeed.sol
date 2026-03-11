@@ -15,6 +15,8 @@ contract DigitalDeed is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
     mapping(uint256 => string) private _deedSerialNumbers;
     // Mapping from tokenId to its name
     mapping(uint256 => string) private _deedNames;
+    // Mapping from tokenId to its ownership history
+    mapping(uint256 => address[]) private _ownershipHistory;
 
     error SerialNumberAlreadyUsed(string serialNumber);
 
@@ -51,6 +53,14 @@ contract DigitalDeed is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
     }
 
     /**
+     * @dev Get the ownership history of a deed.
+     */
+    function getOwnershipHistory(uint256 tokenId) public view returns (address[] memory) {
+        _requireOwned(tokenId);
+        return _ownershipHistory[tokenId];
+    }
+
+    /**
      * @dev Get the physical serial number associated with a deed.
      */
     function getSerialNumber(uint256 tokenId) public view returns (string memory) {
@@ -65,7 +75,11 @@ contract DigitalDeed is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
         override(ERC721, ERC721Enumerable)
         returns (address)
     {
-        return super._update(to, tokenId, auth);
+        address previousOwner = super._update(to, tokenId, auth);
+        if (to != address(0)) {
+            _ownershipHistory[tokenId].push(to);
+        }
+        return previousOwner;
     }
 
     function _increaseBalance(address account, uint128 value)
